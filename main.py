@@ -49,4 +49,14 @@ def create_task(task: TaskCreate):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating task: {str(e)}")
 @app.get('/load_task', status_code=200)
-def get_tasks(task)
+def get_tasks(task:TaskCreate):
+    try:
+        response = supabase.table("tasks").select("*").execute()
+        return {"tasks": response.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading tasks: {str(e)}")
+@app.put('/update_task/{task_id}', status_code=200)
+def update_task(task_id:int, task:TaskCreate):
+    try:
+        response = supabase.table("tasks").update({
+            "title": task.title,
