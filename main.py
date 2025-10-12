@@ -48,3 +48,5 @@ def create_task(task: TaskCreate):
         return {"message": "Task created successfully", "task": response.data[0]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating task: {str(e)}")
+@app.get('/load_task', status_code=200)
+def get_tasks(task)
