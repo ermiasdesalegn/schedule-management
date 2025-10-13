@@ -34,7 +34,7 @@ def read_root():
 @app.get('/dead')
 def dead_boy(name:str):
     return {'hello':name}
-@app.post('/create-task')
+
 
 @app.post('/tasks', status_code=201)
 def create_task(task: TaskCreate):
@@ -49,7 +49,7 @@ def create_task(task: TaskCreate):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error creating task: {str(e)}")
 @app.get('/load_task', status_code=200)
-def get_tasks(task:TaskCreate):
+def get_tasks():
     try:
         response = supabase.table("tasks").select("*").execute()
         return {"tasks": response.data}
@@ -60,3 +60,32 @@ def update_task(task_id:int, task:TaskCreate):
     try:
         response = supabase.table("tasks").update({
             "title": task.title,
+            "description": task.description,
+            "completed": task.completed
+        }).eq("id", task_id).execute()
+        return {"message": "Task updated successfully", "task": response.data[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating task: {str(e)}")
+@app.get('/get_task/{task_id}', status_code=200)
+def get_task(task_id:int):
+    try:
+        response = supabase.table("tasks").select("*").eq("id", task_id).execute()
+        return {"task": response.data[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting task: {str(e)}")
+
+@app.delete('/delete_task/{task_id}', status_code=200)
+def delete_task(task_id:int):
+    try:
+        response = supabase.table("tasks").delete().eq("id", task_id).execute()
+        return {"message": "Task deleted successfully", "task": response.data[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error deleting task: {str(e)}")
+
+@app.get('/get_task/{task_id}', status_code=200)
+def get_task(task_id:int):
+    try:
+        response = supabase.table("tasks").select("*").eq("id", task_id).execute()
+        return {"message": "Task deleted successfully", "task": response.data[0]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error loading task: {str(e)}")
