@@ -66,13 +66,6 @@ def update_task(task_id:int, task:TaskCreate):
         return {"message": "Task updated successfully", "task": response.data[0]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating task: {str(e)}")
-@app.get('/get_task/{task_id}', status_code=200)
-def get_task(task_id:int):
-    try:
-        response = supabase.table("tasks").select("*").eq("id", task_id).execute()
-        return {"task": response.data[0]}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting task: {str(e)}")
 
 @app.delete('/delete_task/{task_id}', status_code=200)
 def delete_task(task_id:int):
@@ -89,3 +82,58 @@ def get_task(task_id:int):
         return {"message": "Task deleted successfully", "task": response.data[0]}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading task: {str(e)}")
+
+
+
+
+@app.get('/tasks/filter/{status}', status_code=200)
+def filter_tasks(status: str):
+    try:
+        if status.lower() == "completed":
+            response = supabase.table("tasks").select("*").eq("completed", True).execute()
+        elif status.lower() == "pending":
+            response = supabase.table("tasks").select("*").eq("completed", False).execute()
+        else:
+            raise HTTPException(status_code=400, detail="Status must be 'completed' or 'pending'")
+        
+        return {"tasks": response.data, "count": len(response.data)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error filtering tasks: {str(e)}")
+
+@app.get('/tasks/search', status_code=200)
+def search_tasks(query: str):
+    try:
+        response = supabase.table("tasks").select("*").ilike("title", f"%{query}%").execute()
+        return {"tasks": response.data, "count": len(response.data)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error searching tasks: {str(e)}")
+
+
+@app.get('/tasks/stats', status_code=200)
+def get_stats():
+    try:
+        all_tasks = supabase.table("tasks").select("*").execute()
+        completed = [t for t in all_tasks.data if t['completed']]
+        pending = [t for t in all_tasks.data if not t['completed']]
+        
+        return {
+            "total_tasks": len(all_tasks.data),
+            "completed_tasks": len(completed),
+            "pending_tasks": len(pending),
+            "completion_rate": round(len(completed) / len(all_tasks.data) * 100, 2) if all_tasks.data else 0
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting stats: {str(e)}")
+
+
+
+
+@app.delete('/tasks/clear-completed', status_code=200)
+def clear_completed():
+    try:
+        response = supabase.table("tasks").delete().eq("completed", True).execute()
+        return {"message": f"Deleted {len(response.data)} completed tasks", "deleted_count": len(response.data)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error clearing completed tasks: {str(e)}")
