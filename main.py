@@ -76,8 +76,21 @@ def read_root():
             "utilities": {
                 "toggle": "PATCH /tasks/{id}/toggle - Quick toggle task completion",
                 "export": "GET /tasks/export - Export tasks (JSON/CSV formats)"
+            },
+            "fun_features": {
+                "random_task": "GET /tasks/random - Get a random task to work on",
+                "copy_task": "POST /tasks/{id}/copy - Duplicate tasks (recurring tasks)",
+                "search_everywhere": "GET /tasks/search-everywhere - Search in title AND description",
+                "needs_attention": "GET /tasks/needs-attention - Find tasks missing descriptions",
+                "word_count": "GET /tasks/word-count - Analyze task verbosity",
+                "motivational_quote": "GET /tasks/motivational-quote - Get inspired!",
+                "completion_streak": "GET /tasks/completion-streak - Track your performance",
+                "quick_stats": "GET /tasks/quick-stats - Fast dashboard stats",
+                "reverse_all": "PATCH /tasks/reverse-all - Reverse all task statuses",
+                "by_title_length": "GET /tasks/by-title-length - Filter by title length"
             }
         },
+        "total_endpoints": 38,
         "features": [
             "✅ Full CRUD operations",
             "✅ Advanced search and filtering",
@@ -87,8 +100,18 @@ def read_root():
             "✅ Data export (JSON, CSV)",
             "✅ Duplicate detection",
             "✅ Partial updates",
+            "✅ Random task picker",
+            "✅ Task copying/duplication",
+            "✅ Motivational quotes",
+            "✅ Completion tracking",
+            "✅ Word count analysis",
             "✅ Comprehensive error handling"
-        ]
+        ],
+        "api_info": {
+            "documentation": "/docs",
+            "alternative_docs": "/redoc",
+            "health": "/"
+        }
     }
 
 
@@ -757,3 +780,359 @@ def get_tasks_with_longest_titles(limit: int = 10):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting tasks with longest titles: {str(e)}")
+
+# SUPER ADVANCED FEATURES
+
+@app.get('/tasks/random', status_code=200)
+def get_random_task(status: Optional[str] = None):
+    """Get a random task (useful for picking what to work on next!)"""
+    try:
+        import random
+        
+        # Get tasks based on status
+        if status == "completed":
+            response = supabase.table("tasks").select("*").eq("completed", True).execute()
+        elif status == "pending":
+            response = supabase.table("tasks").select("*").eq("completed", False).execute()
+        else:
+            response = supabase.table("tasks").select("*").execute()
+        
+        if not response.data:
+            raise HTTPException(status_code=404, detail="No tasks found")
+        
+        # Pick a random task
+        random_task = random.choice(response.data)
+        
+        return {
+            "message": "Here's a random task for you!",
+            "task": random_task,
+            "total_available": len(response.data)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting random task: {str(e)}")
+
+@app.get('/tasks/search-everywhere', status_code=200)
+def search_everywhere(query: str):
+    """Search in both title AND description"""
+    try:
+        # Search in title
+        title_matches = supabase.table("tasks").select("*").ilike("title", f"%{query}%").execute()
+        
+        # Search in description
+        desc_matches = supabase.table("tasks").select("*").ilike("description", f"%{query}%").execute()
+        
+        # Combine and remove duplicates
+        all_matches = {task['id']: task for task in title_matches.data}
+        for task in desc_matches.data:
+            all_matches[task['id']] = task
+        
+        results = list(all_matches.values())
+        
+        return {
+            "query": query,
+            "tasks": results,
+            "count": len(results),
+            "found_in_title": len(title_matches.data),
+            "found_in_description": len(desc_matches.data)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error searching everywhere: {str(e)}")
+
+@app.get('/tasks/incomplete-with-description', status_code=200)
+def get_incomplete_with_description():
+    """Get all pending tasks that have descriptions (well-defined tasks)"""
+    try:
+        all_tasks = supabase.table("tasks").select("*").eq("completed", False).execute()
+        
+        # Filter tasks that have descriptions
+        tasks_with_desc = [t for t in all_tasks.data if t.get('description') and t['description'].strip()]
+        
+        return {
+            "message": "Pending tasks with descriptions",
+            "tasks": tasks_with_desc,
+            "count": len(tasks_with_desc),
+            "total_pending": len(all_tasks.data)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting incomplete tasks with description: {str(e)}")
+
+@app.get('/tasks/needs-attention', status_code=200)
+def get_tasks_needing_attention():
+    """Get pending tasks without descriptions (needs more details)"""
+    try:
+        all_tasks = supabase.table("tasks").select("*").eq("completed", False).execute()
+        
+        # Filter tasks without descriptions
+        tasks_without_desc = [t for t in all_tasks.data if not t.get('description') or not t['description'].strip()]
+        
+        return {
+            "message": "Tasks that need more details",
+            "tasks": tasks_without_desc,
+            "count": len(tasks_without_desc),
+            "suggestion": "Consider adding descriptions to these tasks!"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting tasks needing attention: {str(e)}")
+
+@app.post('/tasks/{task_id}/copy', status_code=201)
+def copy_task(task_id: int, times: int = 1):
+    """Duplicate a task (useful for recurring tasks!)"""
+    try:
+        if times < 1 or times > 10:
+            raise HTTPException(status_code=400, detail="times must be between 1 and 10")
+        
+        # Get original task
+        original = supabase.table("tasks").select("*").eq("id", task_id).execute()
+        
+        if not original.data:
+            raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
+        
+        task = original.data[0]
+        
+        # Create copies
+        copies = []
+        for i in range(times):
+            copy_data = {
+                "title": f"{task['title']} (Copy {i+1})" if times > 1 else f"{task['title']} (Copy)",
+                "description": task.get('description'),
+                "completed": False  # Always start as pending
+            }
+            copies.append(copy_data)
+        
+        # Insert all copies
+        response = supabase.table("tasks").insert(copies).execute()
+        
+        return {
+            "message": f"Created {times} cop{'ies' if times > 1 else 'y'} of task {task_id}",
+            "original_task": task,
+            "created_copies": response.data,
+            "copies_count": len(response.data)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error copying task: {str(e)}")
+
+@app.get('/tasks/completion-streak', status_code=200)
+def get_completion_streak():
+    """Get your task completion statistics"""
+    try:
+        all_tasks = supabase.table("tasks").select("*").order("created_at", desc=True).execute()
+        
+        if not all_tasks.data:
+            return {
+                "message": "No tasks found",
+                "total_tasks": 0
+            }
+        
+        completed = [t for t in all_tasks.data if t['completed']]
+        pending = [t for t in all_tasks.data if not t['completed']]
+        
+        # Calculate last 10 tasks completion rate
+        last_10 = all_tasks.data[:10]
+        last_10_completed = [t for t in last_10 if t['completed']]
+        
+        return {
+            "overall": {
+                "total_tasks": len(all_tasks.data),
+                "completed": len(completed),
+                "pending": len(pending),
+                "completion_rate": round(len(completed) / len(all_tasks.data) * 100, 2)
+            },
+            "recent_performance": {
+                "last_10_tasks": len(last_10),
+                "last_10_completed": len(last_10_completed),
+                "last_10_rate": round(len(last_10_completed) / len(last_10) * 100, 2) if last_10 else 0
+            },
+            "motivation": "Keep going! 🚀" if len(last_10_completed) >= 5 else "You can do this! 💪"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting completion streak: {str(e)}")
+
+@app.get('/tasks/by-title-length', status_code=200)
+def get_tasks_by_title_length(min_length: int = 0, max_length: int = 1000):
+    """Get tasks filtered by title length"""
+    try:
+        if min_length < 0:
+            raise HTTPException(status_code=400, detail="min_length must be >= 0")
+        if max_length > 1000:
+            raise HTTPException(status_code=400, detail="max_length must be <= 1000")
+        if min_length > max_length:
+            raise HTTPException(status_code=400, detail="min_length cannot be greater than max_length")
+        
+        all_tasks = supabase.table("tasks").select("*").execute()
+        
+        # Filter by title length
+        filtered = [t for t in all_tasks.data if min_length <= len(t['title']) <= max_length]
+        
+        # Add title_length to each task
+        for task in filtered:
+            task['title_length'] = len(task['title'])
+        
+        return {
+            "tasks": filtered,
+            "count": len(filtered),
+            "filters": {
+                "min_length": min_length,
+                "max_length": max_length
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error filtering by title length: {str(e)}")
+
+@app.get('/tasks/quick-stats', status_code=200)
+def get_quick_stats():
+    """Get quick dashboard statistics (fast response)"""
+    try:
+        all_tasks = supabase.table("tasks").select("*").execute()
+        
+        if not all_tasks.data:
+            return {
+                "total": 0,
+                "completed": 0,
+                "pending": 0,
+                "completion_percentage": 0
+            }
+        
+        completed_count = sum(1 for t in all_tasks.data if t['completed'])
+        total = len(all_tasks.data)
+        
+        return {
+            "total": total,
+            "completed": completed_count,
+            "pending": total - completed_count,
+            "completion_percentage": round(completed_count / total * 100, 1)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting quick stats: {str(e)}")
+
+@app.patch('/tasks/reverse-all', status_code=200)
+def reverse_all_task_status():
+    """Reverse all task statuses (completed → pending, pending → completed)"""
+    try:
+        all_tasks = supabase.table("tasks").select("*").execute()
+        
+        if not all_tasks.data:
+            return {"message": "No tasks to reverse", "reversed_count": 0}
+        
+        reversed_count = 0
+        
+        for task in all_tasks.data:
+            new_status = not task['completed']
+            supabase.table("tasks").update({"completed": new_status}).eq("id", task['id']).execute()
+            reversed_count += 1
+        
+        return {
+            "message": f"Reversed status of {reversed_count} task(s)",
+            "reversed_count": reversed_count,
+            "warning": "All completed tasks are now pending, and vice versa!"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reversing task statuses: {str(e)}")
+
+@app.get('/tasks/word-count', status_code=200)
+def get_task_word_counts():
+    """Get tasks sorted by word count in title + description"""
+    try:
+        all_tasks = supabase.table("tasks").select("*").execute()
+        
+        if not all_tasks.data:
+            return {"tasks": [], "count": 0}
+        
+        # Calculate word count for each task
+        for task in all_tasks.data:
+            title_words = len(task['title'].split())
+            desc_words = len(task.get('description', '').split()) if task.get('description') else 0
+            task['word_count'] = title_words + desc_words
+            task['title_words'] = title_words
+            task['description_words'] = desc_words
+        
+        # Sort by word count (descending)
+        sorted_tasks = sorted(all_tasks.data, key=lambda t: t['word_count'], reverse=True)
+        
+        # Calculate average
+        avg_words = sum(t['word_count'] for t in sorted_tasks) / len(sorted_tasks)
+        
+        return {
+            "tasks": sorted_tasks,
+            "count": len(sorted_tasks),
+            "statistics": {
+                "average_words_per_task": round(avg_words, 2),
+                "most_verbose": sorted_tasks[0]['word_count'] if sorted_tasks else 0,
+                "least_verbose": sorted_tasks[-1]['word_count'] if sorted_tasks else 0
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting word counts: {str(e)}")
+
+@app.get('/tasks/motivational-quote', status_code=200)
+def get_motivational_quote():
+    """Get a motivational quote based on your task completion"""
+    try:
+        import random
+        
+        all_tasks = supabase.table("tasks").select("*").execute()
+        
+        if not all_tasks.data:
+            return {
+                "quote": "Start your journey with your first task! 🌟",
+                "stats": {"total": 0, "completed": 0}
+            }
+        
+        completed_count = sum(1 for t in all_tasks.data if t['completed'])
+        total = len(all_tasks.data)
+        completion_rate = (completed_count / total * 100) if total > 0 else 0
+        
+        # Different quotes based on completion rate
+        if completion_rate == 0:
+            quotes = [
+                "Every journey begins with a single step! 🚀",
+                "Start small, dream big! ✨",
+                "The secret to getting ahead is getting started! 💪"
+            ]
+        elif completion_rate < 25:
+            quotes = [
+                "You're just getting started! Keep going! 🌱",
+                "Progress, not perfection! 📈",
+                "One task at a time! 🎯"
+            ]
+        elif completion_rate < 50:
+            quotes = [
+                "You're making great progress! 🌟",
+                "Halfway there! Don't stop now! 🔥",
+                "Momentum is building! 🚀"
+            ]
+        elif completion_rate < 75:
+            quotes = [
+                "You're crushing it! 💪",
+                "Amazing progress! Keep it up! ⭐",
+                "You're on fire! 🔥"
+            ]
+        elif completion_rate < 100:
+            quotes = [
+                "Almost there! Finish strong! 🏆",
+                "So close to 100%! You got this! 🎯",
+                "The finish line is in sight! 🏁"
+            ]
+        else:
+            quotes = [
+                "Perfect score! You're a productivity champion! 🏆",
+                "100% complete! Legendary! 👑",
+                "All tasks done! You're unstoppable! 🌟"
+            ]
+        
+        return {
+            "quote": random.choice(quotes),
+            "stats": {
+                "total": total,
+                "completed": completed_count,
+                "pending": total - completed_count,
+                "completion_rate": round(completion_rate, 1)
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting motivational quote: {str(e)}")
