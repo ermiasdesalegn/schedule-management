@@ -36,8 +36,8 @@ class TaskUpdate(BaseModel):
 @app.get("/")
 def read_root():
     return {
-        "message": "Task Management API - Ultimate Edition",
-        "version": "4.0",
+        "message": "Task Management API - AI-Powered Ultimate Edition",
+        "version": "5.0",
         "description": "A comprehensive task management system with advanced features",
         "endpoints": {
             "basic_operations": {
@@ -101,32 +101,52 @@ def read_root():
                 "auto_complete_old": "POST /tasks/auto-complete-old - Auto-complete old tasks",
                 "alphabet_list": "GET /tasks/alphabet-list - Tasks organized A-Z",
                 "health_check": "GET /tasks/health-check - Overall task health report"
+            },
+            "ai_powered_features": {
+                "focus_mode": "GET /tasks/focus-mode - AI-like smart task selection",
+                "pattern_analysis": "GET /tasks/pattern-analysis - Analyze your task patterns",
+                "recommendations": "GET /tasks/recommendations - Smart task suggestions",
+                "ai_insights": "GET /tasks/ai-insights - AI-style productivity insights",
+                "difficulty_estimate": "GET /tasks/difficulty-estimate - Auto-rate task difficulty",
+                "streaks": "GET /tasks/streaks - Track completion streaks",
+                "burnout_check": "GET /tasks/burnout-check - Assess burnout risk"
+            },
+            "templates_and_batch": {
+                "from_template": "POST /tasks/from-template - Create from templates",
+                "smart_batch_update": "POST /tasks/smart-batch-update - Find & replace in tasks"
             }
         },
-        "total_endpoints": 49,
+        "total_endpoints": 58,
         "features": [
             "✅ Full CRUD operations",
+            "✅ AI-powered focus mode",
+            "✅ Smart task recommendations",
+            "✅ Pattern analysis & insights",
+            "✅ Difficulty estimation",
+            "✅ Burnout risk assessment",
+            "✅ Completion streak tracking",
             "✅ Advanced search and filtering",
             "✅ Bulk operations (create, update, delete)",
             "✅ Pagination support",
+            "✅ Task templates (5+ presets)",
+            "✅ Find & replace across tasks",
             "✅ Detailed analytics and statistics",
             "✅ Data export (JSON, CSV)",
             "✅ Duplicate detection",
             "✅ Partial updates",
             "✅ Random task picker",
             "✅ Task copying/duplication",
-            "✅ Task merging",
-            "✅ Task comparison",
+            "✅ Task merging & comparison",
             "✅ Motivational quotes",
-            "✅ Completion tracking",
-            "✅ Productivity scoring (0-100)",
+            "✅ Productivity scoring (0-100 with grades)",
             "✅ Word count analysis",
             "✅ Health check & quality control",
             "✅ Time-based filtering (today, this week)",
             "✅ Alphabetical organization",
             "✅ Activity timeline",
-            "✅ Task name suggestions",
+            "✅ Task name suggestions (5 categories)",
             "✅ Auto-complete old tasks",
+            "✅ AI-style insights & tips",
             "✅ Comprehensive error handling"
         ],
         "api_info": {
@@ -1636,3 +1656,555 @@ def task_health_check():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error checking task health: {str(e)}")
+
+# EXPERIMENTAL & CREATIVE FEATURES
+
+@app.get('/tasks/focus-mode', status_code=200)
+def get_focus_mode_tasks(count: int = 3):
+    """Get a focused list of tasks to work on (AI-like smart selection)"""
+    try:
+        if count < 1 or count > 10:
+            raise HTTPException(status_code=400, detail="count must be between 1 and 10")
+        
+        # Get all pending tasks
+        pending = supabase.table("tasks").select("*").eq("completed", False).execute()
+        
+        if not pending.data:
+            return {
+                "message": "No pending tasks! Time to relax or create new ones! 🎉",
+                "focus_tasks": [],
+                "count": 0
+            }
+        
+        # Score tasks based on various factors (pseudo-AI)
+        scored_tasks = []
+        for task in pending.data:
+            score = 0
+            
+            # Priority 1: Has description (more defined)
+            if task.get('description') and task['description'].strip():
+                score += 30
+            
+            # Priority 2: Shorter title (quick wins)
+            if len(task['title']) < 20:
+                score += 20
+            
+            # Priority 3: Older tasks (should be done)
+            from datetime import datetime
+            task_age_days = (datetime.utcnow() - datetime.fromisoformat(task['created_at'].replace('Z', '+00:00'))).days
+            score += min(task_age_days * 5, 30)  # Up to 30 points for age
+            
+            # Priority 4: Word count (simpler tasks)
+            word_count = len(task['title'].split()) + len(task.get('description', '').split())
+            if word_count < 10:
+                score += 20
+            
+            scored_tasks.append((task, score))
+        
+        # Sort by score and get top tasks
+        scored_tasks.sort(key=lambda x: x[1], reverse=True)
+        focus_tasks = [{"task": t[0], "focus_score": t[1]} for t in scored_tasks[:count]]
+        
+        return {
+            "message": f"Here are your top {count} tasks to focus on! 🎯",
+            "focus_tasks": focus_tasks,
+            "count": len(focus_tasks),
+            "tip": "Start with the highest scored task for maximum productivity!"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting focus mode tasks: {str(e)}")
+
+@app.get('/tasks/pattern-analysis', status_code=200)
+def analyze_task_patterns():
+    """Analyze patterns in your task creation and completion"""
+    try:
+        all_tasks = supabase.table("tasks").select("*").execute()
+        
+        if not all_tasks.data:
+            return {"message": "No tasks to analyze"}
+        
+        # Analyze title patterns
+        common_words = {}
+        for task in all_tasks.data:
+            words = task['title'].lower().split()
+            for word in words:
+                if len(word) > 3:  # Skip short words
+                    common_words[word] = common_words.get(word, 0) + 1
+        
+        # Get top 10 most common words
+        top_words = sorted(common_words.items(), key=lambda x: x[1], reverse=True)[:10]
+        
+        # Analyze completion patterns
+        completed = [t for t in all_tasks.data if t['completed']]
+        pending = [t for t in all_tasks.data if not t['completed']]
+        
+        # Average title length for completed vs pending
+        avg_completed_length = sum(len(t['title']) for t in completed) / len(completed) if completed else 0
+        avg_pending_length = sum(len(t['title']) for t in pending) / len(pending) if pending else 0
+        
+        return {
+            "patterns": {
+                "most_common_words": dict(top_words),
+                "average_title_length": {
+                    "completed_tasks": round(avg_completed_length, 1),
+                    "pending_tasks": round(avg_pending_length, 1)
+                },
+                "completion_pattern": {
+                    "completed_count": len(completed),
+                    "pending_count": len(pending),
+                    "completion_rate": round(len(completed) / len(all_tasks.data) * 100, 1)
+                }
+            },
+            "insights": _generate_insights(completed, pending, top_words)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error analyzing patterns: {str(e)}")
+
+def _generate_insights(completed, pending, top_words):
+    """Generate insights from task patterns"""
+    insights = []
+    
+    if len(completed) > len(pending):
+        insights.append("You're great at completing tasks! Keep it up! 💪")
+    elif len(pending) > len(completed) * 2:
+        insights.append("You have many pending tasks. Focus on completing a few today! 🎯")
+    
+    if top_words and top_words[0][1] > 3:
+        insights.append(f"You frequently create tasks about '{top_words[0][0]}' - seems like a focus area!")
+    
+    if not insights:
+        insights.append("Your task list looks balanced! 👍")
+    
+    return insights
+
+@app.post('/tasks/smart-batch-update', status_code=200)
+def smart_batch_update(find_text: str, replace_text: str, field: str = "title"):
+    """Find and replace text across multiple tasks"""
+    try:
+        if field not in ["title", "description"]:
+            raise HTTPException(status_code=400, detail="field must be 'title' or 'description'")
+        
+        all_tasks = supabase.table("tasks").select("*").execute()
+        
+        updated_tasks = []
+        for task in all_tasks.data:
+            if field == "title" and find_text.lower() in task['title'].lower():
+                new_title = task['title'].replace(find_text, replace_text)
+                supabase.table("tasks").update({"title": new_title}).eq("id", task['id']).execute()
+                updated_tasks.append(task['id'])
+            elif field == "description" and task.get('description') and find_text.lower() in task['description'].lower():
+                new_desc = task['description'].replace(find_text, replace_text)
+                supabase.table("tasks").update({"description": new_desc}).eq("id", task['id']).execute()
+                updated_tasks.append(task['id'])
+        
+        return {
+            "message": f"Updated {len(updated_tasks)} task(s)",
+            "updated_count": len(updated_tasks),
+            "updated_task_ids": updated_tasks,
+            "find": find_text,
+            "replace": replace_text,
+            "field": field
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in smart batch update: {str(e)}")
+
+@app.post('/tasks/from-template', status_code=201)
+def create_from_template(template_name: str):
+    """Create tasks from predefined templates"""
+    try:
+        templates = {
+            "daily_routine": [
+                {"title": "Morning workout", "description": "30 minutes cardio", "completed": False},
+                {"title": "Check emails", "description": "Review and respond", "completed": False},
+                {"title": "Plan the day", "description": "Set priorities", "completed": False}
+            ],
+            "project_setup": [
+                {"title": "Create project repository", "description": "Initialize git repo", "completed": False},
+                {"title": "Setup development environment", "description": "Install dependencies", "completed": False},
+                {"title": "Create README", "description": "Document project", "completed": False},
+                {"title": "Setup CI/CD", "description": "Configure pipeline", "completed": False}
+            ],
+            "weekly_review": [
+                {"title": "Review completed tasks", "description": "What went well?", "completed": False},
+                {"title": "Plan next week", "description": "Set goals", "completed": False},
+                {"title": "Update project status", "description": "Team communication", "completed": False}
+            ],
+            "house_cleaning": [
+                {"title": "Clean kitchen", "description": "Dishes, counters, floor", "completed": False},
+                {"title": "Vacuum living room", "description": "Include under furniture", "completed": False},
+                {"title": "Do laundry", "description": "Wash, dry, fold", "completed": False},
+                {"title": "Bathroom cleaning", "description": "Toilet, sink, shower", "completed": False}
+            ],
+            "study_session": [
+                {"title": "Review notes", "description": "Go over key concepts", "completed": False},
+                {"title": "Practice problems", "description": "Complete exercises", "completed": False},
+                {"title": "Create flashcards", "description": "Important terms", "completed": False},
+                {"title": "Take practice quiz", "description": "Test understanding", "completed": False}
+            ]
+        }
+        
+        if template_name not in templates:
+            available = list(templates.keys())
+            raise HTTPException(status_code=400, detail=f"template_name must be one of: {available}")
+        
+        # Create tasks from template
+        tasks_to_create = templates[template_name]
+        response = supabase.table("tasks").insert(tasks_to_create).execute()
+        
+        return {
+            "message": f"Created {len(response.data)} tasks from '{template_name}' template",
+            "template": template_name,
+            "created_tasks": response.data,
+            "count": len(response.data),
+            "available_templates": list(templates.keys())
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error creating from template: {str(e)}")
+
+@app.get('/tasks/difficulty-estimate', status_code=200)
+def estimate_task_difficulty():
+    """Estimate task difficulty based on various factors"""
+    try:
+        all_tasks = supabase.table("tasks").select("*").execute()
+        
+        if not all_tasks.data:
+            return {"tasks": [], "message": "No tasks to analyze"}
+        
+        tasks_with_difficulty = []
+        for task in all_tasks.data:
+            difficulty_score = 0
+            
+            # Factor 1: Title length (longer = more complex)
+            title_length = len(task['title'])
+            if title_length > 50:
+                difficulty_score += 30
+            elif title_length > 30:
+                difficulty_score += 20
+            elif title_length > 15:
+                difficulty_score += 10
+            
+            # Factor 2: Description length (more details = more complex)
+            if task.get('description'):
+                desc_length = len(task['description'])
+                if desc_length > 100:
+                    difficulty_score += 30
+                elif desc_length > 50:
+                    difficulty_score += 20
+            else:
+                difficulty_score -= 10  # No description = simpler or unclear
+            
+            # Factor 3: Word count (more words = more work)
+            word_count = len(task['title'].split()) + len(task.get('description', '').split())
+            if word_count > 30:
+                difficulty_score += 25
+            elif word_count > 15:
+                difficulty_score += 15
+            elif word_count > 7:
+                difficulty_score += 5
+            
+            # Normalize to 0-100
+            difficulty_score = min(100, max(0, difficulty_score))
+            
+            # Assign difficulty level
+            if difficulty_score >= 70:
+                level = "Hard"
+            elif difficulty_score >= 40:
+                level = "Medium"
+            else:
+                level = "Easy"
+            
+            task['difficulty_score'] = difficulty_score
+            task['difficulty_level'] = level
+            tasks_with_difficulty.append(task)
+        
+        # Sort by difficulty
+        tasks_with_difficulty.sort(key=lambda t: t['difficulty_score'], reverse=True)
+        
+        return {
+            "tasks": tasks_with_difficulty,
+            "count": len(tasks_with_difficulty),
+            "summary": {
+                "hard": len([t for t in tasks_with_difficulty if t['difficulty_level'] == "Hard"]),
+                "medium": len([t for t in tasks_with_difficulty if t['difficulty_level'] == "Medium"]),
+                "easy": len([t for t in tasks_with_difficulty if t['difficulty_level'] == "Easy"])
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error estimating difficulty: {str(e)}")
+
+@app.get('/tasks/streaks', status_code=200)
+def get_completion_streaks():
+    """Track your longest completion streaks"""
+    try:
+        from datetime import datetime, timedelta
+        
+        all_tasks = supabase.table("tasks").select("*").order("created_at").execute()
+        
+        if not all_tasks.data:
+            return {
+                "message": "No tasks yet",
+                "current_streak": 0,
+                "longest_streak": 0
+            }
+        
+        # Group tasks by date
+        tasks_by_date = {}
+        for task in all_tasks.data:
+            task_date = datetime.fromisoformat(task['created_at'].replace('Z', '+00:00')).date()
+            if task_date not in tasks_by_date:
+                tasks_by_date[task_date] = []
+            tasks_by_date[task_date].append(task)
+        
+        # Calculate streaks (days with at least one completed task)
+        current_streak = 0
+        longest_streak = 0
+        temp_streak = 0
+        
+        sorted_dates = sorted(tasks_by_date.keys())
+        today = datetime.utcnow().date()
+        
+        for i, date in enumerate(sorted_dates):
+            completed_on_day = any(t['completed'] for t in tasks_by_date[date])
+            
+            if completed_on_day:
+                temp_streak += 1
+                longest_streak = max(longest_streak, temp_streak)
+                
+                # Check if this is part of current streak (going backwards from today)
+                if date == today or (i > 0 and date == sorted_dates[i-1] + timedelta(days=1)):
+                    current_streak = temp_streak
+            else:
+                temp_streak = 0
+        
+        return {
+            "current_streak": current_streak,
+            "longest_streak": longest_streak,
+            "total_active_days": len([d for d in tasks_by_date if any(t['completed'] for t in tasks_by_date[d])]),
+            "message": f"{'🔥' * min(current_streak, 5)} Keep the streak alive!" if current_streak > 0 else "Start your streak today!"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error calculating streaks: {str(e)}")
+
+@app.get('/tasks/recommendations', status_code=200)
+def get_task_recommendations():
+    """Get smart recommendations on what to do next"""
+    try:
+        pending = supabase.table("tasks").select("*").eq("completed", False).execute()
+        completed = supabase.table("tasks").select("*").eq("completed", True).execute()
+        
+        recommendations = []
+        
+        # Recommendation 1: Oldest pending task
+        if pending.data:
+            oldest = min(pending.data, key=lambda t: t['created_at'])
+            recommendations.append({
+                "type": "oldest_pending",
+                "priority": "high",
+                "task": oldest,
+                "reason": "This task has been pending the longest"
+            })
+        
+        # Recommendation 2: Quick wins (short tasks)
+        quick_wins = [t for t in pending.data if len(t['title']) < 20]
+        if quick_wins:
+            recommendations.append({
+                "type": "quick_win",
+                "priority": "medium",
+                "task": quick_wins[0],
+                "reason": "Quick task for an easy win!"
+            })
+        
+        # Recommendation 3: Well-defined tasks
+        well_defined = [t for t in pending.data if t.get('description') and len(t['description']) > 20]
+        if well_defined:
+            recommendations.append({
+                "type": "well_defined",
+                "priority": "medium",
+                "task": well_defined[0],
+                "reason": "This task is well-defined and ready to work on"
+            })
+        
+        # Recommendation 4: Based on completion pattern
+        if completed.data and pending.data:
+            # Find pattern in completed task titles
+            completed_words = set()
+            for task in completed.data:
+                completed_words.update(task['title'].lower().split())
+            
+            # Find pending tasks with similar words
+            for task in pending.data:
+                task_words = set(task['title'].lower().split())
+                if completed_words & task_words:  # Intersection
+                    recommendations.append({
+                        "type": "pattern_match",
+                        "priority": "low",
+                        "task": task,
+                        "reason": "Similar to tasks you've completed before"
+                    })
+                    break
+        
+        return {
+            "recommendations": recommendations[:5],  # Top 5
+            "count": len(recommendations[:5]),
+            "message": "Here's what we recommend you work on next! 🎯"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting recommendations: {str(e)}")
+
+@app.get('/tasks/burnout-check', status_code=200)
+def check_burnout_risk():
+    """Check if you're at risk of burnout based on task patterns"""
+    try:
+        from datetime import datetime, timedelta
+        
+        all_tasks = supabase.table("tasks").select("*").execute()
+        
+        if not all_tasks.data:
+            return {
+                "risk_level": "none",
+                "message": "Not enough data to assess"
+            }
+        
+        # Calculate recent task creation rate
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        recent_tasks = [t for t in all_tasks.data if datetime.fromisoformat(t['created_at'].replace('Z', '+00:00')) > week_ago]
+        
+        # Risk factors
+        risk_score = 0
+        factors = []
+        
+        # Factor 1: Too many tasks created recently
+        if len(recent_tasks) > 30:
+            risk_score += 30
+            factors.append("High task creation rate")
+        
+        # Factor 2: Low completion rate
+        completed_count = sum(1 for t in all_tasks.data if t['completed'])
+        completion_rate = completed_count / len(all_tasks.data) * 100
+        if completion_rate < 30:
+            risk_score += 30
+            factors.append("Low completion rate")
+        
+        # Factor 3: Many pending tasks
+        pending_count = len(all_tasks.data) - completed_count
+        if pending_count > 50:
+            risk_score += 25
+            factors.append("Too many pending tasks")
+        
+        # Factor 4: Tasks without descriptions (unclear goals)
+        unclear_tasks = [t for t in all_tasks.data if not t.get('description')]
+        if len(unclear_tasks) / len(all_tasks.data) > 0.5:
+            risk_score += 15
+            factors.append("Many tasks lack clear descriptions")
+        
+        # Determine risk level
+        if risk_score >= 70:
+            risk_level = "high"
+            advice = "⚠️ High burnout risk! Consider reducing your task load and focusing on completion."
+        elif risk_score >= 40:
+            risk_level = "medium"
+            advice = "⚡ Moderate risk. Try to complete more tasks before adding new ones."
+        else:
+            risk_level = "low"
+            advice = "✅ You're managing your tasks well! Keep it up!"
+        
+        return {
+            "risk_level": risk_level,
+            "risk_score": risk_score,
+            "factors": factors,
+            "advice": advice,
+            "statistics": {
+                "total_tasks": len(all_tasks.data),
+                "pending_tasks": pending_count,
+                "completion_rate": round(completion_rate, 1),
+                "recent_task_creation": len(recent_tasks)
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error checking burnout risk: {str(e)}")
+
+@app.get('/tasks/ai-insights', status_code=200)
+def get_ai_style_insights():
+    """Get AI-style insights about your productivity (pseudo-AI)"""
+    try:
+        import random
+        
+        all_tasks = supabase.table("tasks").select("*").execute()
+        
+        if not all_tasks.data:
+            return {
+                "insights": ["Create your first task to get started!"],
+                "productivity_tips": ["Start small and build momentum"]
+            }
+        
+        insights = []
+        tips = []
+        
+        completed = [t for t in all_tasks.data if t['completed']]
+        pending = [t for t in all_tasks.data if not t['completed']]
+        
+        # Insight 1: Completion rate analysis
+        completion_rate = len(completed) / len(all_tasks.data) * 100
+        if completion_rate > 70:
+            insights.append(f"🌟 Impressive! You have a {completion_rate:.1f}% completion rate. You're a productivity champion!")
+        elif completion_rate > 40:
+            insights.append(f"📊 You're doing well with a {completion_rate:.1f}% completion rate. Keep pushing!")
+        else:
+            insights.append(f"💡 Your completion rate is {completion_rate:.1f}%. Focus on completing tasks before adding new ones.")
+        
+        # Insight 2: Task description quality
+        with_desc = [t for t in all_tasks.data if t.get('description')]
+        desc_rate = len(with_desc) / len(all_tasks.data) * 100
+        if desc_rate < 50:
+            tips.append("Add descriptions to your tasks for better clarity and higher completion rates")
+        
+        # Insight 3: Task volume
+        if len(pending) > 20:
+            tips.append("You have many pending tasks. Try completing 5 tasks before adding new ones")
+        
+        # Insight 4: Pattern recognition
+        title_lengths = [len(t['title']) for t in completed]
+        if title_lengths:
+            avg_length = sum(title_lengths) / len(title_lengths)
+            if avg_length < 20:
+                insights.append("💡 You complete shorter-titled tasks more often. Break complex tasks into smaller ones!")
+        
+        # Insight 5: Random motivational insight
+        motivational = [
+            "🚀 Small daily progress leads to big results!",
+            "⭐ Every completed task is a step toward your goals!",
+            "💪 Consistency beats perfection. Keep going!",
+            "🎯 Focus on progress, not perfection!"
+        ]
+        insights.append(random.choice(motivational))
+        
+        # Add general tips if not enough specific ones
+        general_tips = [
+            "Work on one task at a time for better focus",
+            "Celebrate small wins to stay motivated",
+            "Review and update your task list weekly",
+            "Use the Focus Mode feature to prioritize tasks"
+        ]
+        
+        while len(tips) < 3:
+            tip = random.choice(general_tips)
+            if tip not in tips:
+                tips.append(tip)
+        
+        return {
+            "insights": insights,
+            "productivity_tips": tips,
+            "your_stats": {
+                "total_tasks": len(all_tasks.data),
+                "completed": len(completed),
+                "completion_rate": round(completion_rate, 1)
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating insights: {str(e)}")
